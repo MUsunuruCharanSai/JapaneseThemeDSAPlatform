@@ -6,11 +6,9 @@ dist/
 build/
 *.tsbuildinfo
 
-# Secrets (keep sample.env as a template)
+# Secrets
 .env
 .env.*
-!.env.example
-!sample.env
 
 # Logs
 *.log

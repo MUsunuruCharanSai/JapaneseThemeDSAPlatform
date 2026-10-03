@@ -246,7 +246,8 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ user, onClose }) => {
 
       localStorage.setItem(`userProfile_${user.uid}`, JSON.stringify(profileToSave));
 
-      const response = await fetch('http://localhost:5000/api/auth/profile', {
+      const apiBase = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${apiBase}/api/auth/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
