@@ -24,7 +24,7 @@ app.use((req, _res, next) => {
 
   if (headerPath) {
     const [pathname, search] = headerPath.split('?');
-    if (pathname.startsWith('/api')) {
+    if (pathname.startsWith('/api') && pathname !== '/api' && pathname !== '/api/index') {
       req.url = search ? `${pathname}?${search}` : pathname;
       next();
       return;
