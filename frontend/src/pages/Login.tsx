@@ -81,6 +81,9 @@ const Login: React.FC = () => {
             <div className="error-message">
               <div className="error-icon">⚠️</div>
               <span>{error}</span>
+              {error.includes('Authorized domains') && (
+                <div style={{ marginTop: 8, fontWeight: 700 }}>{window.location.hostname}</div>
+              )}
             </div>
           )}
 

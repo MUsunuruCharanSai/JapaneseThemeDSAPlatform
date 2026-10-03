@@ -439,8 +439,8 @@ const DSAManagement: React.FC = () => {
       setLoading(true);
       const sheetData = await fetchDSASheet();
       setData(sheetData);
-    } catch {
-      setError('Failed to fetch data.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to fetch data.');
     } finally {
       setLoading(false);
     }
