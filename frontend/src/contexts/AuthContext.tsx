@@ -248,6 +248,12 @@ const getFirebaseErrorMessage = (errorCode: string): string => {
       return 'Popup was blocked. Please allow popups for this site.';
     case 'auth/cancelled-popup-request':
       return 'Google sign-in was cancelled.';
+    case 'auth/unauthorized-domain':
+      return 'This site is not allowed in Firebase. Add your Vercel domain under Authentication → Settings → Authorized domains.';
+    case 'auth/operation-not-allowed':
+      return 'This sign-in method is disabled in Firebase Authentication.';
+    case 'auth/invalid-api-key':
+      return 'Firebase API key is missing or invalid. Set VITE_FIREBASE_* in Vercel and redeploy.';
     default:
       return 'An error occurred. Please try again.';
   }

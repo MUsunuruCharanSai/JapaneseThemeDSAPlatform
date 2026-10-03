@@ -15,6 +15,18 @@ import paymentRoutes from './routes/payment';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Vercel catch-all functions often receive /auth/verify instead of /api/auth/verify
+app.use((req, _res, next) => {
+  const url = req.url || '';
+  if (url !== '/' && !url.startsWith('/api')) {
+    const q = url.indexOf('?');
+    const path = q === -1 ? url : url.slice(0, q);
+    const query = q === -1 ? '' : url.slice(q);
+    req.url = `/api${path.startsWith('/') ? path : `/${path}`}${query}`;
+  }
+  next();
+});
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {

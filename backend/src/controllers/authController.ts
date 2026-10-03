@@ -66,6 +66,12 @@ export const verifyToken = async (req: Request, res: Response): Promise<void> =>
     } else if (error.code === 'auth/user-not-found') {
       message = 'User not found.';
       statusCode = 404;
+    } else if (
+      error.code === 'app/invalid-credential' ||
+      error.message?.includes('Failed to parse private key')
+    ) {
+      message = 'Server Firebase Admin key is invalid. Check FIREBASE_PRIVATE_KEY in Vercel.';
+      statusCode = 500;
     }
 
     const response: AuthResponse = {

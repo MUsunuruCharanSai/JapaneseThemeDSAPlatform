@@ -11,6 +11,10 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+if (!firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.projectId) {
+  throw new Error('Firebase config is missing. Set VITE_FIREBASE_* in Vercel and redeploy.');
+}
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
