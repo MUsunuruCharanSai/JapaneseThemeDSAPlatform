@@ -150,7 +150,7 @@ export const fetchDSASheet = async (): Promise<DSASheetData> => {
   const errors: string[] = [];
 
   try {
-    const response = await axios.get('/api/dsa/sheet', { timeout: 20000 });
+    const response = await axios.get('/api/dsa/sheet', { timeout: 25000 });
     if (response.data.success && Array.isArray(response.data.data?.headings)) {
       return response.data.data;
     }
@@ -171,5 +171,8 @@ export const fetchDSASheet = async (): Promise<DSASheetData> => {
     errors.push(error.message || 'Firestore REST read failed');
   }
 
-  throw new Error(errors.filter(Boolean).join(' | '));
+  throw new Error(
+    'Firestore is blocked by security rules. Publish firestore.rules in Firebase, then refresh. ' +
+    errors.filter(Boolean).join(' | ')
+  );
 };

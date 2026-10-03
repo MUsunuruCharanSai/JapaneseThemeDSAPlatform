@@ -6,66 +6,79 @@ const HEADINGS_COLLECTION = 'dsa-headings';
 const SUBHEADINGS_COLLECTION = 'dsa-subheadings';
 const QUESTIONS_COLLECTION = 'dsa-questions';
 
-// Load DSA sheet data from Firestore
+const toDate = (value: any): Date => {
+  if (!value) return new Date(0);
+  if (typeof value.toDate === 'function') return value.toDate();
+  if (value instanceof Date) return value;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date(0) : parsed;
+};
+
+const byCreatedAt = <T extends { createdAt: Date }>(a: T, b: T) =>
+  a.createdAt.getTime() - b.createdAt.getTime();
+
+let sheetCache: { data: DSASheetData; expiresAt: number } | null = null;
+
 export const loadDSASheetData = async (): Promise<DSASheetData> => {
-  try {
-    const headingsRef = firestore.collection(HEADINGS_COLLECTION);
-    const headingsSnapshot = await headingsRef.orderBy('createdAt', 'asc').get();
+  if (sheetCache && sheetCache.expiresAt > Date.now()) {
+    return sheetCache.data;
+  }
 
-    const headings = await Promise.all(headingsSnapshot.docs.map(async (headingDoc) => {
-      const headingData = headingDoc.data();
-      const subheadingsRef = headingsRef.doc(headingDoc.id).collection(SUBHEADINGS_COLLECTION);
-      const subheadingsSnapshot = await subheadingsRef.orderBy('createdAt', 'asc').get();
+  const headingsRef = firestore.collection(HEADINGS_COLLECTION);
+  const headingsSnapshot = await headingsRef.get();
 
-      const subheadings = await Promise.all(subheadingsSnapshot.docs.map(async (subheadingDoc) => {
-        const subheadingData = subheadingDoc.data();
-        const questionsSnapshot = await subheadingsRef
-          .doc(subheadingDoc.id)
-          .collection(QUESTIONS_COLLECTION)
-          .orderBy('createdAt', 'asc')
-          .get();
+  const headings = await Promise.all(headingsSnapshot.docs.map(async (headingDoc) => {
+    const headingData = headingDoc.data();
+    const subheadingsRef = headingsRef.doc(headingDoc.id).collection(SUBHEADINGS_COLLECTION);
+    const subheadingsSnapshot = await subheadingsRef.get();
 
-        return {
-          id: subheadingDoc.id,
-          name: subheadingData.name,
-          createdAt: subheadingData.createdAt.toDate(),
-          updatedAt: subheadingData.updatedAt.toDate(),
-          questions: questionsSnapshot.docs.map((questionDoc) => {
-            const questionData = questionDoc.data();
-            return {
-              id: questionDoc.id,
-              name: questionData.name,
-              article: questionData.article,
-              difficulty: questionData.difficulty,
-              youtubeLink: questionData.youtubeLink,
-              questionLink: questionData.questionLink,
-              createdAt: questionData.createdAt.toDate(),
-              updatedAt: questionData.updatedAt.toDate(),
-            } as DSAQuestion;
-          }),
-        } as DSASubheading;
-      }));
+    const subheadings = await Promise.all(subheadingsSnapshot.docs.map(async (subheadingDoc) => {
+      const subheadingData = subheadingDoc.data();
+      const questionsSnapshot = await subheadingsRef
+        .doc(subheadingDoc.id)
+        .collection(QUESTIONS_COLLECTION)
+        .get();
 
       return {
-        id: headingDoc.id,
-        name: headingData.name,
-        createdAt: headingData.createdAt.toDate(),
-        updatedAt: headingData.updatedAt.toDate(),
-        subheadings,
-      } as DSAHeading;
+        id: subheadingDoc.id,
+        name: subheadingData.name,
+        createdAt: toDate(subheadingData.createdAt),
+        updatedAt: toDate(subheadingData.updatedAt),
+        questions: questionsSnapshot.docs.map((questionDoc) => {
+          const questionData = questionDoc.data();
+          return {
+            id: questionDoc.id,
+            name: questionData.name,
+            article: questionData.article,
+            difficulty: questionData.difficulty,
+            youtubeLink: questionData.youtubeLink,
+            questionLink: questionData.questionLink,
+            createdAt: toDate(questionData.createdAt),
+            updatedAt: toDate(questionData.updatedAt),
+          } as DSAQuestion;
+        }).sort(byCreatedAt),
+      } as DSASubheading;
     }));
 
-    const lastUpdated = headings.length > 0
-      ? headings.reduce((latest, heading) =>
-          heading.updatedAt > latest ? heading.updatedAt : latest,
-          new Date(0)
-        )
-      : new Date();
+    return {
+      id: headingDoc.id,
+      name: headingData.name,
+      createdAt: toDate(headingData.createdAt),
+      updatedAt: toDate(headingData.updatedAt),
+      subheadings: subheadings.sort(byCreatedAt),
+    } as DSAHeading;
+  }));
 
-    return { headings, lastUpdated };
-  } catch (error) {
-    throw new Error('Failed to load DSA sheet data from Firestore');
-  }
+  const lastUpdated = headings.length > 0
+    ? headings.reduce((latest, heading) =>
+        heading.updatedAt > latest ? heading.updatedAt : latest,
+        new Date(0)
+      )
+    : new Date();
+
+  const data = { headings: headings.sort(byCreatedAt), lastUpdated };
+  sheetCache = { data, expiresAt: Date.now() + 60_000 };
+  return data;
 };
 
 // Save DSA sheet data (this method is now mainly for compatibility - individual operations handle persistence)
