@@ -7,6 +7,7 @@ import DSAHeadingCard from './DSAHeadingCard';
 import PremiumModal from './PremiumModal';
 import PaymentModal from './PaymentModal';
 import QuestionDescriptionModal from './QuestionDescriptionModal';
+import { fetchDSASheet } from '../utils/dsaSheet';
 
 // --- PROFESSIONAL DESIGN SYSTEM (Clean Neutral) ---
 const styles = `
@@ -655,20 +656,12 @@ const DSAViewer: React.FC = () => {
   const loadDSASheetData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/dsa/sheet');
-      if (response.data.success) {
-        const sheetData = response.data.data;
-        setData(sheetData);
-        
-        // Calculate Total Questions
-        const total = sheetData.headings.reduce((acc: number, h: DSAHeading) => 
-          acc + h.subheadings.reduce((subAcc: number, s: DSASubheading) => subAcc + s.questions.length, 0), 0
-        );
-        setTotalQuestionsCount(total);
-
-        // All headings start closed by default
-        // Removed: Default expand first heading
-      }
+      const sheetData = await fetchDSASheet();
+      setData(sheetData);
+      const total = sheetData.headings.reduce((acc: number, h: DSAHeading) =>
+        acc + h.subheadings.reduce((subAcc: number, s: DSASubheading) => subAcc + s.questions.length, 0), 0
+      );
+      setTotalQuestionsCount(total);
     } catch {
     } finally {
       setLoading(false);

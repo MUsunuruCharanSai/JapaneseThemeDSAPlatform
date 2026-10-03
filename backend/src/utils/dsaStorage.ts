@@ -12,57 +12,49 @@ export const loadDSASheetData = async (): Promise<DSASheetData> => {
     const headingsRef = firestore.collection(HEADINGS_COLLECTION);
     const headingsSnapshot = await headingsRef.orderBy('createdAt', 'asc').get();
 
-    const headings: DSAHeading[] = [];
-
-    for (const headingDoc of headingsSnapshot.docs) {
+    const headings = await Promise.all(headingsSnapshot.docs.map(async (headingDoc) => {
       const headingData = headingDoc.data();
-      const heading: DSAHeading = {
-        id: headingDoc.id,
-        name: headingData.name,
-        createdAt: headingData.createdAt.toDate(),
-        updatedAt: headingData.updatedAt.toDate(),
-        subheadings: []
-      };
-
-      // Load subheadings for this heading
       const subheadingsRef = headingsRef.doc(headingDoc.id).collection(SUBHEADINGS_COLLECTION);
       const subheadingsSnapshot = await subheadingsRef.orderBy('createdAt', 'asc').get();
 
-      for (const subheadingDoc of subheadingsSnapshot.docs) {
+      const subheadings = await Promise.all(subheadingsSnapshot.docs.map(async (subheadingDoc) => {
         const subheadingData = subheadingDoc.data();
-        const subheading: DSASubheading = {
+        const questionsSnapshot = await subheadingsRef
+          .doc(subheadingDoc.id)
+          .collection(QUESTIONS_COLLECTION)
+          .orderBy('createdAt', 'asc')
+          .get();
+
+        return {
           id: subheadingDoc.id,
           name: subheadingData.name,
           createdAt: subheadingData.createdAt.toDate(),
           updatedAt: subheadingData.updatedAt.toDate(),
-          questions: []
-        };
+          questions: questionsSnapshot.docs.map((questionDoc) => {
+            const questionData = questionDoc.data();
+            return {
+              id: questionDoc.id,
+              name: questionData.name,
+              article: questionData.article,
+              difficulty: questionData.difficulty,
+              youtubeLink: questionData.youtubeLink,
+              questionLink: questionData.questionLink,
+              createdAt: questionData.createdAt.toDate(),
+              updatedAt: questionData.updatedAt.toDate(),
+            } as DSAQuestion;
+          }),
+        } as DSASubheading;
+      }));
 
-        // Load questions for this subheading
-        const questionsRef = subheadingsRef.doc(subheadingDoc.id).collection(QUESTIONS_COLLECTION);
-        const questionsSnapshot = await questionsRef.orderBy('createdAt', 'asc').get();
+      return {
+        id: headingDoc.id,
+        name: headingData.name,
+        createdAt: headingData.createdAt.toDate(),
+        updatedAt: headingData.updatedAt.toDate(),
+        subheadings,
+      } as DSAHeading;
+    }));
 
-        subheading.questions = questionsSnapshot.docs.map(questionDoc => {
-          const questionData = questionDoc.data();
-          return {
-            id: questionDoc.id,
-            name: questionData.name,
-            article: questionData.article,
-            difficulty: questionData.difficulty,
-            youtubeLink: questionData.youtubeLink,
-            questionLink: questionData.questionLink,
-            createdAt: questionData.createdAt.toDate(),
-            updatedAt: questionData.updatedAt.toDate(),
-          } as DSAQuestion;
-        });
-
-        heading.subheadings.push(subheading);
-      }
-
-      headings.push(heading);
-    }
-
-    // Get the most recent update timestamp
     const lastUpdated = headings.length > 0
       ? headings.reduce((latest, heading) =>
           heading.updatedAt > latest ? heading.updatedAt : latest,

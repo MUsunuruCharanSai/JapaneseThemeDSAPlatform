@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../utils/firebase';
 import axios from 'axios';
+import { fetchDSASheet } from '../utils/dsaSheet';
 
 // --- PROFESSIONAL DESIGN SYSTEM ---
 const styles = `
@@ -436,10 +437,8 @@ const DSAManagement: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/dsa/sheet');
-      if (response.data.success) {
-        setData(response.data.data);
-      }
+      const sheetData = await fetchDSASheet();
+      setData(sheetData);
     } catch {
       setError('Failed to fetch data.');
     } finally {
