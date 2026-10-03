@@ -18,8 +18,8 @@ class AuthService {
   async logout(): Promise<void> {
     try {
       await axios.post(`${API_BASE_URL}/logout`);
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Logout failed');
+    } catch {
+      // Client sign-out still proceeds if the API is unreachable
     }
   }
 }

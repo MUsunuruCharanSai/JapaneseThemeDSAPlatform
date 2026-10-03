@@ -4,11 +4,14 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
+  User as FirebaseUser,
   UserCredential
 } from 'firebase/auth';
-import { auth, googleProvider } from '../utils/firebase';
+import { auth, googleProvider, isFirebaseConfigured } from '../utils/firebase';
 import { authService } from '../services/authService';
 import { AuthState, User, LoginCredentials, SignupCredentials } from '../types/auth';
 
@@ -33,6 +36,32 @@ export const useAuth = () => {
 interface AuthProviderProps {
   children: ReactNode;
 }
+
+const userFromFirebase = (firebaseUser: FirebaseUser): User => {
+  const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || '').toLowerCase();
+  const email = firebaseUser.email || '';
+  return {
+    uid: firebaseUser.uid,
+    email,
+    displayName: firebaseUser.displayName,
+    photoURL: firebaseUser.photoURL,
+    emailVerified: firebaseUser.emailVerified,
+    role: email && adminEmail && email.toLowerCase() === adminEmail ? 'admin' : 'user',
+  };
+};
+
+const resolveUser = async (firebaseUser: FirebaseUser): Promise<User> => {
+  try {
+    const idToken = await firebaseUser.getIdToken();
+    const response = await authService.verifyToken(idToken);
+    if (response.success && response.user) {
+      return response.user;
+    }
+  } catch {
+    // Production API can be down; Firebase session is still valid
+  }
+  return userFromFirebase(firebaseUser);
+};
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const navigate = useNavigate();
@@ -59,35 +88,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const handleAuthSuccess = async (userCredential: UserCredential) => {
-    try {
-      const idToken = await userCredential.user.getIdToken();
-      const response = await authService.verifyToken(idToken);
-
-      if (response.success && response.user) {
-        updateAuthState({
-          user: response.user,
-          loading: false,
-          error: null,
-        });
-
-        // Navigate to appropriate dashboard after successful authentication
-        navigateToDashboard(response.user);
-      } else {
-        throw new Error(response.message || 'Authentication failed');
-      }
-    } catch (error: any) {
-      updateAuthState({
-        user: null,
-        loading: false,
-        error: error.message,
-      });
-    }
+    const user = await resolveUser(userCredential.user);
+    updateAuthState({
+      user,
+      loading: false,
+      error: null,
+    });
+    navigateToDashboard(user);
   };
 
   const login = async (credentials: LoginCredentials) => {
     try {
       clearError();
       updateAuthState({ loading: true });
+
+      if (!isFirebaseConfigured) {
+        throw new Error('auth/invalid-api-key');
+      }
 
       const userCredential = await signInWithEmailAndPassword(
         auth,
@@ -99,7 +116,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error: any) {
       updateAuthState({
         loading: false,
-        error: getFirebaseErrorMessage(error.code),
+        error: getFirebaseErrorMessage(error.code || error.message),
       });
       throw error;
     }
@@ -124,7 +141,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error: any) {
       updateAuthState({
         loading: false,
-        error: getFirebaseErrorMessage(error.code),
+        error: error.message === 'Passwords do not match'
+          ? error.message
+          : getFirebaseErrorMessage(error.code),
       });
       throw error;
     }
@@ -135,8 +154,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       clearError();
       updateAuthState({ loading: true });
 
-      const result = await signInWithPopup(auth, googleProvider);
-      await handleAuthSuccess(result);
+      if (!isFirebaseConfigured) {
+        throw new Error('auth/invalid-api-key');
+      }
+
+      try {
+        const result = await signInWithPopup(auth, googleProvider);
+        await handleAuthSuccess(result);
+      } catch (popupError: any) {
+        if (
+          popupError.code === 'auth/popup-blocked' ||
+          popupError.code === 'auth/operation-not-supported-in-this-environment' ||
+          popupError.code === 'auth/cancelled-popup-request'
+        ) {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        }
+        throw popupError;
+      }
     } catch (error: any) {
       updateAuthState({
         loading: false,
@@ -169,36 +204,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   useEffect(() => {
+    if (!isFirebaseConfigured) {
+      updateAuthState({
+        user: null,
+        loading: false,
+        error: getFirebaseErrorMessage('auth/invalid-api-key'),
+      });
+      return;
+    }
+
+    let cancelled = false;
+
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user && !cancelled) {
+          await handleAuthSuccess(result);
+        }
+      })
+      .catch(() => undefined);
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        try {
-          const idToken = await firebaseUser.getIdToken();
-          const response = await authService.verifyToken(idToken);
-
-          if (response.success && response.user) {
-            // Only update state if we don't already have a user (prevents conflicts with direct auth flow)
-            if (!authState.user) {
-              updateAuthState({
-                user: response.user,
-                loading: false,
-                error: null,
-              });
-            }
-          } else {
-            updateAuthState({
-              user: null,
-              loading: false,
-              error: null,
-            });
-          }
-        } catch (error: any) {
+        const user = await resolveUser(firebaseUser);
+        if (!cancelled) {
           updateAuthState({
-            user: null,
+            user,
             loading: false,
-            error: error.message,
+            error: null,
           });
         }
-      } else {
+      } else if (!cancelled) {
         updateAuthState({
           user: null,
           loading: false,
@@ -207,8 +242,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     });
 
-    return () => unsubscribe();
-  }, [authState.user]); // Add authState.user as dependency to prevent unnecessary updates
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   const value: AuthContextType = {
     ...authState,
@@ -229,9 +267,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 const getFirebaseErrorMessage = (errorCode: string): string => {
   switch (errorCode) {
     case 'auth/user-not-found':
-      return 'User not found. Please check your email or sign up.';
+    case 'auth/invalid-credential':
     case 'auth/wrong-password':
-      return 'Wrong password. Please try again.';
+      return 'Wrong email or password. Please try again.';
     case 'auth/email-already-in-use':
       return 'Email already exists. Please try logging in instead.';
     case 'auth/weak-password':

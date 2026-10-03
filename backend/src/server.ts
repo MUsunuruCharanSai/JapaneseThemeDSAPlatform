@@ -27,46 +27,31 @@ app.use((req, _res, next) => {
   next();
 });
 
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
+if (!process.env.VERCEL) {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
     },
-  },
-}));
+  }));
+}
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests from this IP, please try again later.',
-});
-app.use(limiter);
+if (!process.env.VERCEL) {
+  app.use(rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: 'Too many requests from this IP, please try again later.',
+  }));
+}
 
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'http://localhost:3000',
-  'http://localhost:3002',
-  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
-  process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : undefined,
-].filter((origin): origin is string => Boolean(origin));
-
-const corsOptions = {
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
-      callback(null, true);
-      return;
-    }
-    callback(new Error('Not allowed by CORS'));
-  },
+app.use(cors({
+  origin: true,
   credentials: true,
-  optionsSuccessStatus: 200,
-};
-app.use(cors(corsOptions));
+}));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -79,6 +64,9 @@ app.get(['/health', '/api/health'], (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/dsa', dsaRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/auth', authRoutes);
+app.use('/dsa', dsaRoutes);
+app.use('/payment', paymentRoutes);
 
 app.use('*', (req, res) => {
   res.status(404).json({ message: 'Route not found' });
