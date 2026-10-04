@@ -25,10 +25,59 @@ const Users: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [updatingUsers, setUpdatingUsers] = useState<Set<string>>(new Set());
+  const [freeAccessEnabled, setFreeAccessEnabled] = useState(false);
+  const [updatingFreeAccess, setUpdatingFreeAccess] = useState(false);
 
   useEffect(() => {
     fetchUsers();
+    fetchFreeAccess();
   }, []);
+
+  const fetchFreeAccess = async () => {
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const response = await axios.get('/api/auth/admin/free-access', {
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      if (response.data.success) {
+        setFreeAccessEnabled(!!response.data.enabled);
+      }
+    } catch {}
+  };
+
+  const handleToggleFreeAccess = async () => {
+    const nextEnabled = !freeAccessEnabled;
+    const confirmMessage = nextEnabled
+      ? 'Grant free access to everyone? All users will be able to use the sheet without paying.'
+      : 'Revoke free access? Only users with individual premium access will keep it.';
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      setUpdatingFreeAccess(true);
+      const idToken = await auth.currentUser?.getIdToken();
+      const response = await axios.put(
+        '/api/auth/admin/free-access',
+        { enabled: nextEnabled },
+        {
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+          },
+        }
+      );
+      if (response.data.success) {
+        setFreeAccessEnabled(!!response.data.enabled);
+        fetchUsers();
+      } else {
+        setError(response.data.message || 'Failed to update free access');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to update free access');
+    } finally {
+      setUpdatingFreeAccess(false);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -382,6 +431,34 @@ const Users: React.FC = () => {
           >
             💰 Manage Payments
           </div>
+
+          <button
+            onClick={handleToggleFreeAccess}
+            disabled={updatingFreeAccess}
+            style={{
+              width: '100%',
+              padding: '16px 20px',
+              margin: '10px 0',
+              borderRadius: '12px',
+              cursor: updatingFreeAccess ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              fontSize: '16px',
+              fontWeight: '600',
+              color: 'white',
+              border: 'none',
+              background: freeAccessEnabled ? '#dc2626' : '#059669',
+              opacity: updatingFreeAccess ? 0.7 : 1
+            }}
+          >
+            {updatingFreeAccess
+              ? 'Updating...'
+              : freeAccessEnabled
+                ? 'Revoke Free Access'
+                : 'Grant Free Access'}
+          </button>
         </div>
 
         {/* Logout Button at Bottom */}
@@ -463,22 +540,52 @@ const Users: React.FC = () => {
             padding: '30px',
             borderBottom: '1px solid #e5e7eb',
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white'
+            color: 'white',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '20px',
+            flexWrap: 'wrap'
           }}>
-            <h1 style={{
-              margin: '0 0 10px 0',
-              fontSize: '28px',
-              fontWeight: '700'
-            }}>
-              User Management
-            </h1>
-            <p style={{
-              margin: '0',
-              opacity: '0.9',
-              fontSize: '16px'
-            }}>
-              Manage all registered users ({users.length} total)
-            </p>
+            <div>
+              <h1 style={{
+                margin: '0 0 10px 0',
+                fontSize: '28px',
+                fontWeight: '700'
+              }}>
+                User Management
+              </h1>
+              <p style={{
+                margin: '0',
+                opacity: '0.9',
+                fontSize: '16px'
+              }}>
+                {freeAccessEnabled
+                  ? `Free access is on for everyone (${users.length} users)`
+                  : `Manage all registered users (${users.length} total)`}
+              </p>
+            </div>
+            <button
+              onClick={handleToggleFreeAccess}
+              disabled={updatingFreeAccess}
+              style={{
+                padding: '12px 18px',
+                border: 'none',
+                borderRadius: '10px',
+                cursor: updatingFreeAccess ? 'not-allowed' : 'pointer',
+                fontSize: '15px',
+                fontWeight: '600',
+                color: 'white',
+                background: freeAccessEnabled ? '#dc2626' : '#059669',
+                opacity: updatingFreeAccess ? 0.7 : 1
+              }}
+            >
+              {updatingFreeAccess
+                ? 'Updating...'
+                : freeAccessEnabled
+                  ? 'Revoke Free Access'
+                  : 'Grant Free Access'}
+            </button>
           </div>
 
           <div style={{ padding: '30px' }}>
@@ -645,18 +752,19 @@ const Users: React.FC = () => {
                       }}>
                         <button
                           onClick={() => handleTogglePremiumAccess(user.uid, user.premiumAccess || false)}
-                          disabled={updatingUsers.has(user.uid)}
+                          disabled={freeAccessEnabled || updatingUsers.has(user.uid)}
+                          title={freeAccessEnabled ? 'Free access is on for everyone' : undefined}
                           style={{
                             padding: '6px 16px',
                             borderRadius: '6px',
                             border: 'none',
                             fontSize: '12px',
                             fontWeight: '600',
-                            cursor: updatingUsers.has(user.uid) ? 'not-allowed' : 'pointer',
+                            cursor: freeAccessEnabled || updatingUsers.has(user.uid) ? 'not-allowed' : 'pointer',
                             background: user.premiumAccess ? '#10b981' : '#ef4444',
                             color: 'white',
                             transition: 'all 0.2s ease',
-                            opacity: updatingUsers.has(user.uid) ? 0.6 : 1
+                            opacity: freeAccessEnabled || updatingUsers.has(user.uid) ? 0.6 : 1
                           }}
                           onMouseOver={(e) => {
                             if (!updatingUsers.has(user.uid)) {
