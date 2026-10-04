@@ -304,3 +304,51 @@ export const getMyPremiumAccess = async (req: Request, res: Response): Promise<v
     });
   }
 };
+
+export const getFreeAccessSetting = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { getFreeAccessForAll } = await import('../utils/userAccess.js');
+    const enabled = await getFreeAccessForAll();
+
+    res.status(200).json({
+      success: true,
+      enabled,
+      message: enabled ? 'Free access is enabled for everyone' : 'Free access is disabled'
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve free access setting'
+    });
+  }
+};
+
+export const setFreeAccessSetting = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { enabled } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({
+        success: false,
+        message: 'enabled must be a boolean'
+      });
+      return;
+    }
+
+    const { setFreeAccessForAll } = await import('../utils/userAccess.js');
+    await setFreeAccessForAll(enabled);
+
+    res.status(200).json({
+      success: true,
+      enabled,
+      message: enabled
+        ? 'Free access granted to everyone'
+        : 'Free access revoked. Individual premium settings apply again.'
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update free access setting'
+    });
+  }
+};
