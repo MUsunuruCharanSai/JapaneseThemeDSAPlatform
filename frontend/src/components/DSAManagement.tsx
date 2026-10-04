@@ -227,6 +227,24 @@ const styles = `
   .btn-primary:hover { background: var(--brand-700); }
   .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
+  .btn-free-access {
+    background: #059669;
+    color: white;
+    box-shadow: 0 1px 2px rgba(5, 150, 105, 0.3);
+    white-space: nowrap;
+  }
+  .btn-free-access:hover { background: #047857; }
+  .btn-free-access:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .btn-free-access-on {
+    background: #dc2626;
+    color: white;
+    box-shadow: 0 1px 2px rgba(220, 38, 38, 0.3);
+    white-space: nowrap;
+  }
+  .btn-free-access-on:hover { background: #b91c1c; }
+  .btn-free-access-on:disabled { opacity: 0.6; cursor: not-allowed; }
+
   .btn-outline {
     background: #ffffff;
     border-color: var(--slate-300);
@@ -404,6 +422,8 @@ const DSAManagement: React.FC = () => {
   const [data, setData] = useState<DSASheetData>({ headings: [], lastUpdated: new Date() });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [freeAccessEnabled, setFreeAccessEnabled] = useState(false);
+  const [updatingFreeAccess, setUpdatingFreeAccess] = useState(false);
 
   // UI State
   const [activeView, setActiveView] = useState<'overview' | 'headings' | 'questions'>('overview');
@@ -432,7 +452,44 @@ const DSAManagement: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    loadFreeAccess();
   }, []);
+
+  const loadFreeAccess = async () => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await axios.get('/api/auth/admin/free-access', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.data.success) {
+        setFreeAccessEnabled(!!res.data.enabled);
+      }
+    } catch {}
+  };
+
+  const handleToggleFreeAccess = async () => {
+    const nextEnabled = !freeAccessEnabled;
+    const confirmMessage = nextEnabled
+      ? 'Grant free access to everyone? All users will be able to use the sheet without paying.'
+      : 'Revoke free access? Only users with individual premium access will keep it.';
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      setUpdatingFreeAccess(true);
+      const token = await auth.currentUser?.getIdToken();
+      const res = await axios.put(
+        '/api/auth/admin/free-access',
+        { enabled: nextEnabled },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.data.success) {
+        setFreeAccessEnabled(!!res.data.enabled);
+      }
+    } catch {
+    } finally {
+      setUpdatingFreeAccess(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -809,16 +866,27 @@ const DSAManagement: React.FC = () => {
               {activeView === 'overview' ? 'Dashboard' : 
                activeView === 'headings' ? 'Content Structure' : 'Question Bank'}
             </h1>
-            <div className="header-stats">
+            <div className="header-stats" style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
               <div className="stat-badge">
                 <span className="stat-number">{data.headings.length}</span>
                 <span className="stat-label">Modules</span>
-        </div>
-              <div className="stat-badge" style={{ marginLeft: '24px' }}>
+              </div>
+              <div className="stat-badge">
                 <span className="stat-number">{data.headings.reduce((acc, h) => acc + h.subheadings.length, 0)}</span>
                 <span className="stat-label">Topics</span>
-      </div>
-    </div>
+              </div>
+              <button
+                className={`btn ${freeAccessEnabled ? 'btn-free-access-on' : 'btn-free-access'}`}
+                onClick={handleToggleFreeAccess}
+                disabled={updatingFreeAccess}
+              >
+                {updatingFreeAccess
+                  ? 'Updating...'
+                  : freeAccessEnabled
+                    ? 'Revoke Free Access'
+                    : 'Grant Free Access'}
+              </button>
+            </div>
           </header>
 
           <main className="content-canvas">
