@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
-import { verifyToken, logout, getCurrentUser, updateProfile, getAllUsers, updateUserPremiumAccess, getMyPremiumAccess } from '../controllers/authController';
+import { verifyToken, logout, getCurrentUser, updateProfile, getAllUsers, updateUserPremiumAccess, getMyPremiumAccess, getFreeAccessSetting, setFreeAccessSetting } from '../controllers/authController';
 import { verifyFirebaseToken, requireAuth, requireAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -30,6 +30,12 @@ const validatePremiumAccess = [
     .withMessage('premiumAccess must be a boolean'),
 ];
 
+const validateFreeAccess = [
+  body('enabled')
+    .isBoolean()
+    .withMessage('enabled must be a boolean'),
+];
+
 // Routes
 router.post('/verify', validateToken, verifyToken);
 router.post('/logout', logout);
@@ -37,6 +43,8 @@ router.get('/me', verifyFirebaseToken, requireAuth, getCurrentUser);
 router.put('/profile', verifyFirebaseToken, requireAuth, validateProfileUpdate, updateProfile);
 router.get('/admin/users', verifyFirebaseToken, requireAuth, requireAdmin, getAllUsers);
 router.put('/admin/users/:userId/premium', verifyFirebaseToken, requireAuth, requireAdmin, validatePremiumAccess, updateUserPremiumAccess);
+router.get('/admin/free-access', verifyFirebaseToken, requireAuth, requireAdmin, getFreeAccessSetting);
+router.put('/admin/free-access', verifyFirebaseToken, requireAuth, requireAdmin, validateFreeAccess, setFreeAccessSetting);
 router.get('/premium-access', verifyFirebaseToken, requireAuth, getMyPremiumAccess);
 
 export default router;
