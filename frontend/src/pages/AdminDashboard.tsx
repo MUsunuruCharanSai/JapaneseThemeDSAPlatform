@@ -1,12 +1,55 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { auth } from '../utils/firebase';
+import axios from 'axios';
 import DSAManagement from '../components/DSAManagement';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [freeAccessEnabled, setFreeAccessEnabled] = useState(false);
+  const [updatingFreeAccess, setUpdatingFreeAccess] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const loadFreeAccess = async () => {
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        const response = await axios.get('/api/auth/admin/free-access', {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (response.data.success) {
+          setFreeAccessEnabled(!!response.data.enabled);
+        }
+      } catch {}
+    };
+    loadFreeAccess();
+  }, []);
+
+  const handleToggleFreeAccess = async () => {
+    const nextEnabled = !freeAccessEnabled;
+    const confirmMessage = nextEnabled
+      ? 'Grant free access to everyone? All users will be able to use the sheet without paying.'
+      : 'Revoke free access? Only users with individual premium access will keep it.';
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      setUpdatingFreeAccess(true);
+      const idToken = await auth.currentUser?.getIdToken();
+      const response = await axios.put(
+        '/api/auth/admin/free-access',
+        { enabled: nextEnabled },
+        { headers: { Authorization: `Bearer ${idToken}` } }
+      );
+      if (response.data.success) {
+        setFreeAccessEnabled(!!response.data.enabled);
+      }
+    } catch {
+    } finally {
+      setUpdatingFreeAccess(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -208,6 +251,35 @@ const AdminDashboard: React.FC = () => {
           >
             💰 Manage Payments
           </div>
+
+          <button
+            onClick={handleToggleFreeAccess}
+            disabled={updatingFreeAccess}
+            style={{
+              width: '100%',
+              padding: '16px 20px',
+              margin: '10px 0',
+              borderRadius: '12px',
+              cursor: updatingFreeAccess ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              fontSize: '16px',
+              fontWeight: '600',
+              color: 'white',
+              border: 'none',
+              background: freeAccessEnabled ? '#dc2626' : '#059669',
+              opacity: updatingFreeAccess ? 0.7 : 1,
+              transition: 'all 0.3s ease'
+            }}
+          >
+            {updatingFreeAccess
+              ? 'Updating...'
+              : freeAccessEnabled
+                ? 'Revoke Free Access'
+                : 'Grant Free Access'}
+          </button>
         </div>
 
         {/* Logout Button at Bottom */}
