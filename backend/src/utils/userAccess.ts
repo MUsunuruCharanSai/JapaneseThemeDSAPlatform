@@ -3,10 +3,46 @@ import * as admin from 'firebase-admin';
 
 // Firestore collection for user premium access
 const USER_ACCESS_COLLECTION = 'user-access';
+const SETTINGS_COLLECTION = 'app-settings';
+const SETTINGS_DOC = 'global';
+
+let freeAccessCache: { value: boolean; expires: number } | null = null;
+const FREE_ACCESS_CACHE_MS = 15000;
+
+export const getFreeAccessForAll = async (): Promise<boolean> => {
+  try {
+    if (freeAccessCache && Date.now() < freeAccessCache.expires) {
+      return freeAccessCache.value;
+    }
+
+    const doc = await firestore.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC).get();
+    const enabled = doc.exists && doc.data()?.freeAccessForAll === true;
+    freeAccessCache = { value: enabled, expires: Date.now() + FREE_ACCESS_CACHE_MS };
+    return enabled;
+  } catch (error) {
+    return freeAccessCache?.value === true;
+  }
+};
+
+export const setFreeAccessForAll = async (enabled: boolean): Promise<void> => {
+  try {
+    await firestore.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC).set({
+      freeAccessForAll: enabled,
+      updatedAt: new Date(),
+    }, { merge: true });
+    freeAccessCache = { value: enabled, expires: Date.now() + FREE_ACCESS_CACHE_MS };
+  } catch (error) {
+    throw new Error('Failed to update free access setting');
+  }
+};
 
 // Get user premium access status
 export const getUserPremiumAccess = async (userId: string): Promise<boolean> => {
   try {
+    if (await getFreeAccessForAll()) {
+      return true;
+    }
+
     const accessRef = firestore.collection(USER_ACCESS_COLLECTION).doc(userId);
     const doc = await accessRef.get();
     
@@ -38,6 +74,14 @@ export const setUserPremiumAccess = async (userId: string, premiumAccess: boolea
 // Get premium access for multiple users
 export const getUsersPremiumAccess = async (userIds: string[]): Promise<Record<string, boolean>> => {
   try {
+    if (await getFreeAccessForAll()) {
+      const accessMap: Record<string, boolean> = {};
+      userIds.forEach(uid => {
+        accessMap[uid] = true;
+      });
+      return accessMap;
+    }
+
     const accessRef = firestore.collection(USER_ACCESS_COLLECTION);
     const accessMap: Record<string, boolean> = {};
     
